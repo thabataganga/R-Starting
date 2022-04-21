@@ -1,7 +1,12 @@
 # History files
 .Rhistory
+/*.Rhistory
 .Rapp.history
-
+/*.Rapp.history
+.html
+/*.html
+.pdf
+/*.pdf
 # Session Data files
 .RData
 
