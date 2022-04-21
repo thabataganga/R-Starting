@@ -5,9 +5,9 @@
 ### R ###
 # History files
 .Rhistory
-/*.Rhistory
+/.Rhistory
 .Rapp.history
-/*.Rapp.history
+/.Rapp.history
 
 # Session Data files
 .RData
