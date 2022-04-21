@@ -1,0 +1,269 @@
+---
+title: "**Aula 3 - Manipulando Dados no R**"
+subtitle: "*Quais as 6 (seis) cidades brasileiras com maior taxa de mortalidade por Covid-19?*"
+author: "Profa. Flávia Queiroz"
+date: "20/04/2022"
+output: html_document
+---
+
+
+## Instalando e Ativando o pacote 
+```{r message=FALSE, warning=FALSE}
+#install.packages("tidyverse","covid19br")  
+library(tidyverse)
+
+# Verificando as funções contidas no tidyverse
+tidyverse_packages() 
+
+# Ativando diretamente os pacotes:
+#library(readxl)
+#library(readr)
+#library(tidyr)
+#library(magrittr)
+#library(dplyr)
+```
+
+## Sobre o dplyr: o pacote mais importante do tidyverse
+### O que é o dplyr?
+O dplyr é um poderoso pacote R para transformar e resumir dados tabulares com linhas e colunas. Para maiores informações, pode-se consultar <http://cran.rstudio.com/web/packages/dplyr/vignettes/introduction.html>.
+
+### Qual sua utilidade?
+Contém  funções que permite a execução de operações comuns de manipulação de dados, como filtrar linhas, selecionar colunas específicas, reordenar linhas, adicionar novas colunas e resumir dados. Além de, dispor de uma função útil para concatenar mais de um tibble/data.frame.
+
+### Qual vantagem em seu uso?
+Comparadas às funções básicas em R como split(), subset(), apply(), sapply(), lapply(), tapply() and aggregate(),  as funções no dplyr são mais fáceis de trabalhar, mais consistentes na sintaxe e melhor direcionadas para análise de dados em cima de um data.frame, ao invés de trabalhar apensas vetores.
+
+### Funções importantes dos pacote dplyr 
+
+Função (dplyr)| Descrição
+:-------------: | :-------------------------------
+`select()`    | Selecionar as colunas
+`filter()`    | Filtrar linhas
+`arrange()`   | Reordenar ou organizer linhas
+`mutate()`    | Criar novas colunas
+`summarise()` | Resumir/Sumarizar valores
+`group_by()`  | Criar grupos pela aplicação do conceito "split-apply-combine"
+              
+
+## Importação de dados
+Vamos aprender como utilizar estas funções, numa base de dados com informações sobre o COVID-19, a nível Brasil.
+
+## Importando as planilhas: estimativas populacionais TCU 2019 por município e base de dados COVID-19.
+
+```{r message=FALSE, warning=FALSE}
+# Arquivo .xls ou .xlsx: 
+pop.est <- readxl::read_excel("estimativa_TCU_2019_cidades.xlsx", sheet = 2)
+
+# Arquivo .csv
+covid <- readr::read_csv("cases-brazil-cities-time.csv",na = c("", "-", "NA"))
+View(covid)
+# ou sem uso do readr:
+covid2 <- read.csv("cases-brazil-cities-time.csv", header = TRUE, stringsAsFactors = F, sep=",")
+```
+
+## Manipulando as tibbles/dataframes: 
+### Características das variáveis: 
+#### glimpse(): objetivo é ter uma visão geral da tibble 
+```{r}
+glimpse(covid)
+glimpse(pop.est)
+```
+  
+### Unindo duas colunas em uma só / Separando uma coluna em duas ou mais
+#### unite(): objetivo é criar variável, unindo duas colunas
+OBS: Por default,a função unite colocará um underscore(_) entre os 
+valores de colunas diferentes. Se não queremos tal separador, devemos usar o argumento sep="".
+
+````{r}
+pop.est2<-tidyr::unite(pop.est,ibgeID,COD_UF,COD_MUNIC,sep="")
+glimpse(pop.est2)
+```
+#### separate(): separa duas ou mais variáveis que estão concatenadas em uma mesma coluna
+
+
+### Modificando/criando uma variável 
+#### mutate(): um dos objetivos pode ser modificar a classificação da variável
+```{r}
+c2<-mutate(covid,ibgeID=factor(ibgeID))
+glimpse(c2)
+```
+
+### Junção de conjuntos de dados
+#### inner_join(): Junção de tibbles pela intersecção de valores em ambas 
+```{r}
+dados<-inner_join(c2,pop.est2, by="ibgeID")
+```
+
+### PIPE: operador %>% (no R Studio, temos o atalho ctrl+shift+m)
+Ao utilizar o operador %>% (do pacote magrittr) nas funções do pacote dplyr, é importante lembrar que o primeiro argumento é a tibble (conjunto de dados). O PIPE faz com que o resultante do comando anterior a ele, seja o primeiro argumento do comando após o PIPE. Por exemplo, a junção dos dois conjuntos, poderia ser feito da seguinte forma:
+```{r}
+dados<- c2 %>% 
+  inner_join(pop.est2, by="ibgeID")
+```
+
+Este comando pode ser usado para linkar uma sequência de funções. 
+A partir daqui, usaremos o PIPE, para uma melhor otimização de nossa programação.
+
+
+### Selecionando variáveis 
+#### select(): objetivo é selecionar colunas de uma Tabela. 
+```{r}
+dados2<-dados%>%
+  select(date,ibgeID,MUNICIPIO,UF,newDeaths,newCases, 15)
+
+# Ou, podemos ocultar uma ou mais colunas, mantendo as demais. Para isso, posso selecionar a retirada de cada      coluna, ou de uma determinada coluna à outra. Além disso, pode-se usar a posição ou o nome referente a coluna.
+# names(dados)
+# dados%>% select(-c(2:4, deaths,totalCases,10:13))
+
+```
+
+#### Renomeando colunas
+Renomear colunas pode ser feito na própria função select()
+ou pelo uso da já conhecida função colnames().
+```{r}
+dados3<-dados2%>%
+  select(Data=date,ibgeID, MUNICIPIO, UF, Mortes=newDeaths, Casos=newCases, Pop=POP_ESTIMADA)
+#ou
+#colnames(dados2)<-c("Data","ibgeID", "MUNICIPIO", "UF", "Mortes", "Casos", "Pop")
+```
+
+### Sumarizando resultados por classe de uma variável
+#### summarise(): objetivo é gerar estatística(s), apresentando os resultados em uma nova coluna. 
+OBS.: Esta função recebe “n” elementos, e retorna um único conforme cálculo pedido. Na realidade, ela aplica uma função às variáveis, retornando um vetor de tamanho 1. 
+Por isso, geralmente ela é utilizada em conjunto da função group_by().
+
+Em nosso problema, queremos somar a quantidade de mortes para cada cidade:
+```{r message=F}
+Total_city<-dados3 %>% 
+  group_by(UF,MUNICIPIO)%>%
+      summarise(Mortes2=sum(Mortes),Pop=min(Pop))
+```
+
+OBS.: Podem ser pedidas mais de uma sumarização, simultaneamente.
+```{r}
+# Estatísticas Descritivas de Mortes por Estado e Cidades
+Total_city %>%
+  group_by(UF) %>%
+      summarise(Media_mortes = mean(Mortes2), 
+                  Min_mortes = min(Mortes2),
+                  #Md_mortes = median(Mortes2),
+                  Max_mortes = max(Mortes2),
+                Mortes_estado=sum(Mortes2),
+                   Pop_estado=sum(Pop),
+                   n_Cidades = n())
+```
+### Criando nova variável Indicador  
+#### mutate(): também é utilizada para criação de novas variáveis. 
+
+OBS.: Já havíamos explorado sua função de modificar classificação de variável.
+```{r}
+TxMort<-Total_city %>% 
+            mutate(txMort=round((Mortes2*100000)/Pop,4))
+```
+
+### Filtrando por Classe/Grupo de variável
+#### filter(): objetivo é filtrar linhas, usando comparadores lógicos: <, <ou=,>, >ou=, == e !=
+```{r}
+# Somente observações do estado de SP ;
+TxMort %>%
+  filter(UF=="SP")
+# Observações que a cidade contenha "São" no nome
+TxMort %>%
+  filter(str_detect(MUNICIPIO,"São"))
+# Observações que a cidade contenha "dos Campos" no nome e seja do estado de SP
+TxMort%>%
+  filter(UF=="SP",grepl('dos Campos', MUNICIPIO))
+# Observações cuja taxa de mortalidade é acima de 98
+TxMort %>%
+  filter(txMort>98)
+# Observações, exceto da cidade de São Paulo
+TxMort %>%
+  filter(MUNICIPIO!="São Paulo")
+```
+
+### Ordenando linhas conforme valores de uma ou mais colunas
+#### arrange(): objetivo é (re)ordenar linhas por determinada(s) variável(is)
+OBS.:Por default, a ordenação é feita por ordem alfabética ou do menor para o maior.
+Se queremos ordem descendente, basta aplicar o comando "desc()":
+  
+```{r}
+#Ordem crescente 
+TxMort %>% 
+  arrange(UF, txMort)
+
+#Ordem decrescente
+SeisMais<- TxMort %>%
+             arrange(desc(txMort))
+head(SeisMais)
+```
+
+### Outras funções a quem interessar
+#### count(): contagem de observações por fator de cada variável categórica
+```{r}
+# número de dias com confirmação de casos por ordem de estado e município
+# OBS.: Agrupar por Cidade e Estado, pois diferentes estados possuem cidades
+# com mesmo nome. Por exemplo, Belém, Santo André, Rio Branco etc.
+dados3 %>% count(UF, MUNICIPIO)
+```
+
+#### n_distinct(): retorna o número de classes distintas 
+```{r message=F}
+# número de cidades 
+dados3 %>% 
+  summarise(n_distinct(MUNICIPIO))
+
+# número de cidades por estado
+dados3 %>% 
+  group_by(UF)%>%
+     summarise(n_distinct(MUNICIPIO))
+```
+#### ungroup(): permite desagrupar a base de dados e continuar sumarizando
+```{r message=F}
+# Total_city agrupado por estado, pois por default ele agrupa pela primeira variável caso não especifiquemos por qual variável deve ser o group_by:
+Total_city %>%
+  summarise(sum(Mortes2))
+
+#Desagrupando Total_city:
+Total_city %>%
+  ungroup()%>%
+  summarise(sum(Mortes2))
+```
+#### n(): retorna o número de observações
+```{r message=F}
+# número de dias com confirmação de casos por Cidade
+# OBS.: Agrupar por Cidade e Estado, pois diferentes estados possuem cidades
+# com mesmo nome. Por exemplo, Belém, Santo André, Rio Branco etc.
+dados %>% 
+  group_by(MUNICIPIO,UF) %>%
+  summarise(Dias = n())
+```
+
+--------------------------------------------------------------------
+# **Atualização dos dados**
+## *Quais as 6 (seis) cidades brasileiras com maior taxa de mortalidade por Covid-19?*
+```{r message=F, warning=F}
+# Removendo o histórico de objetos carregados no console
+remove (list = objects() )
+
+# install.packages("covid19br")
+library(covid19br)
+data <- downloadCovid19("cities") #escolha a categoria (cidade ou estado)
+glimpse(data)
+
+taxaM <- select(data, date, city, state, Mortes=newDeaths, Casos=newCases, Pop=pop)%>%             
+            group_by(state,city) %>%
+              summarise(MortesT=sum(Mortes),Pop=min(Pop)) %>%  
+                mutate(txMort=round((MortesT*100000)/Pop,4)) %>% 
+                  arrange(desc(txMort))
+head(taxaM)
+
+#Taxa de mortalidade de São José dos Campos-SP (por 100.000 habit.)
+taxaM %>%
+  filter(state=="SP",grepl('dos Campos', city))
+```
+
+atual<-data %>% 
+  select(date, city, state, newCases,accumCases, accumDeaths, epi_week, Pop=pop)%>%
+    filter(state=="MG",grepl('Ituiutaba', city), accumCases!="0")
+head(atual)
+
